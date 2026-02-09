@@ -1,0 +1,32 @@
+name: Deploy Workers
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  deploy-workers:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake build-essential emscripten libtool pkg-config
+
+      - name: Build WASM
+        run: ./scripts/build_wasm.sh
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4'
+          workingDirectory: workers
+          command: deploy --config wrangler.jsonc

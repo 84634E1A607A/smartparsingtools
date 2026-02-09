@@ -1,0 +1,53 @@
+name: Auto-merge upstream main
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # weekly, Monday 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  merge-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: wasm_parsing_target
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add or update upstream remote
+        run: |
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream https://github.com/smartmontools/smartmontools.git
+          else
+            git remote add upstream https://github.com/smartmontools/smartmontools.git
+          fi
+          git fetch upstream main
+
+      - name: Check if merge needed
+        id: check
+        run: |
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream already merged; nothing to do."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream main
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          git merge --no-ff --no-edit upstream/main
+
+      - name: Push merge commit
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          git push origin HEAD:wasm_parsing_target

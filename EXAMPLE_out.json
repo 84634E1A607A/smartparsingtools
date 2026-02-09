@@ -1,0 +1,522 @@
+{
+        "input": {
+                "sn": "PHLA8105012N256CGN",
+                "md": "INTEL SSDSC2KW256G8",
+                "fw": "LHF002C"
+        },
+        "ata_smart_attributes": {
+                "revision": 1,
+                "table": [
+                        {
+                                "id": 5,
+                                "name": "Reallocated_Sector_Ct",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 37,
+                                        "string": "37"
+                                }
+                        },
+                        {
+                                "id": 9,
+                                "name": "Power_On_Hours",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 36566,
+                                        "string": "36566"
+                                }
+                        },
+                        {
+                                "id": 12,
+                                "name": "Power_Cycle_Count",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 14,
+                                        "string": "14"
+                                }
+                        },
+                        {
+                                "id": 170,
+                                "name": "Unknown_Attribute",
+                                "value": 92,
+                                "worst": 92,
+                                "flags": {
+                                        "value": 51,
+                                        "string": "PO--CK ",
+                                        "prefailure": true,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 171,
+                                "name": "Program_Fail_Count",
+                                "value": 85,
+                                "worst": 85,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 35,
+                                        "string": "35"
+                                }
+                        },
+                        {
+                                "id": 172,
+                                "name": "Erase_Fail_Count",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 173,
+                                "name": "Unknown_Attribute",
+                                "value": 94,
+                                "worst": 94,
+                                "flags": {
+                                        "value": 51,
+                                        "string": "PO--CK ",
+                                        "prefailure": true,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 425211789365,
+                                        "string": "425211789365"
+                                }
+                        },
+                        {
+                                "id": 174,
+                                "name": "Unexpect_Power_Loss_Ct",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 12,
+                                        "string": "12"
+                                }
+                        },
+                        {
+                                "id": 183,
+                                "name": "SATA_Downshift_Count",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 184,
+                                "name": "End-to-End_Error",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 51,
+                                        "string": "PO--CK ",
+                                        "prefailure": true,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 187,
+                                "name": "Reported_Uncorrect",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 32,
+                                        "string": "32"
+                                }
+                        },
+                        {
+                                "id": 190,
+                                "name": "Temperature_Case",
+                                "value": 26,
+                                "worst": 33,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 103081377818,
+                                        "string": "26 (Min/Max 24/33)"
+                                }
+                        },
+                        {
+                                "id": 192,
+                                "name": "Unsafe_Shutdown_Count",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 12,
+                                        "string": "12"
+                                }
+                        },
+                        {
+                                "id": 199,
+                                "name": "CRC_Error_Count",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 225,
+                                "name": "Host_Writes_32MiB",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 499366,
+                                        "string": "499366"
+                                }
+                        },
+                        {
+                                "id": 226,
+                                "name": "Workld_Media_Wear_Indic",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 227,
+                                "name": "Workld_Host_Reads_Perc",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 228,
+                                "name": "Workload_Minutes",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 232,
+                                "name": "Available_Reservd_Space",
+                                "value": 92,
+                                "worst": 92,
+                                "flags": {
+                                        "value": 51,
+                                        "string": "PO--CK ",
+                                        "prefailure": true,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 233,
+                                "name": "Media_Wearout_Indicator",
+                                "value": 90,
+                                "worst": 90,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 236,
+                                "name": "Unknown_Attribute",
+                                "value": 90,
+                                "worst": 90,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 0,
+                                        "string": "0"
+                                }
+                        },
+                        {
+                                "id": 241,
+                                "name": "Host_Writes_32MiB",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 499366,
+                                        "string": "499366"
+                                }
+                        },
+                        {
+                                "id": 242,
+                                "name": "Host_Reads_32MiB",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 593944,
+                                        "string": "593944"
+                                }
+                        },
+                        {
+                                "id": 249,
+                                "name": "NAND_Writes_1GiB",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 25679,
+                                        "string": "25679"
+                                }
+                        },
+                        {
+                                "id": 252,
+                                "name": "Unknown_Attribute",
+                                "value": 100,
+                                "worst": 100,
+                                "flags": {
+                                        "value": 50,
+                                        "string": "-O--CK ",
+                                        "prefailure": false,
+                                        "updated_online": true,
+                                        "performance": false,
+                                        "error_rate": false,
+                                        "event_count": true,
+                                        "auto_keep": true
+                                },
+                                "raw": {
+                                        "value": 99,
+                                        "string": "99"
+                                }
+                        }
+                ]
+        },
+        "spare_available": {
+                "current_percent": 100
+        },
+        "power_on_time": {
+                "hours": 36566
+        },
+        "power_cycle_count": 14,
+        "temperature": {
+                "current": 26
+        }
+}

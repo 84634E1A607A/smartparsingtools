@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SMART Parsing Tools</title>
+    <meta name="description" content="Parse ATA SMART raw data in the browser with SMART Parsing Tools. Paste 512-byte hex data and inspect SMART attributes, flags, and JSON output. No data uploaded to server.">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://smart.aajax.top/">
+    <meta property="og:title" content="SMART Parsing Tools">
+    <meta property="og:description" content="Parse ATA SMART raw data in the browser. Paste 512-byte hex data and inspect SMART attributes, flags, and JSON output. No data uploaded to server.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="SMART Parsing Tools">
+    <meta property="og:url" content="https://smart.aajax.top/">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="SMART Parsing Tools">
+    <meta name="twitter:description" content="Parse ATA SMART raw data in the browser. Paste 512-byte hex data and inspect SMART attributes, flags, and JSON output. No data uploaded to server.">
+    <meta name="color-scheme" content="light dark">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="./index.css">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "SMART Parsing Tools",
+        "description": "Parse ATA SMART raw data in the browser. Paste 512-byte hex data and inspect SMART attributes, flags, and JSON output. No data uploaded to server.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Web"
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <header class="hero">
+        <div class="hero-text">
+          <p class="eyebrow">SMART data parser</p>
+          <h1>SMART Parsing Tools</h1>
+          <p class="lede">Paste 512-byte ATA SMART raw data, parse it with the WASM module, and inspect the output instantly. No data uploaded to server.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="theme-toggle" class="ghost icon-button" type="button" aria-label="Toggle light and dark mode">
+            <span class="icon" aria-hidden="true">
+              <i class="fa-regular fa-sun"></i>
+            </span>
+          </button>
+        </div>
+      </header>
+
+      <main class="card">
+        <form id="smart-form" class="form" autocomplete="off">
+          <div class="field">
+            <label for="device-sn">Device SN</label>
+            <input id="device-sn" name="device-sn" type="text" placeholder="e.g. PHLA8105012N256CGN" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="device-model">Device Model</label>
+            <input id="device-model" name="device-model" type="text" placeholder="e.g. INTEL SSDSC2KW256G8" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="device-fw">Device Firmware Version</label>
+            <input id="device-fw" name="device-fw" type="text" placeholder="e.g. LHF002C" spellcheck="false">
+          </div>
+          <div class="field">
+            <div class="field-header">
+              <label for="raw-data">512-byte hex raw SMART data</label>
+              <span id="raw-count" class="hint">0 / 1024</span>
+            </div>
+            <textarea id="raw-data" name="raw-data" rows="8" placeholder="Paste 1024 hex characters (512 bytes)" spellcheck="false"></textarea>
+            <p class="hint">Hex only, no 0x prefix. Whitespace is ignored.</p>
+          </div>
+          <div class="actions">
+            <button id="parse-btn" type="submit">Parse SMART data</button>
+            <span id="status" class="status" role="status" aria-live="polite"></span>
+          </div>
+        </form>
+      </main>
+
+      <section class="viz card is-hidden">
+        <div class="viz-header">
+          <h2>Parsed SMART Data</h2>
+        </div>
+        <div id="summary" class="summary-grid"></div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <h3>SMART Attributes</h3>
+            <span id="attr-meta" class="hint"></span>
+          </div>
+          <div class="table-wrapper">
+            <table class="attr-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Value</th>
+                  <th>Worst</th>
+                  <th>Raw</th>
+                  <th>Flags</th>
+                </tr>
+              </thead>
+              <tbody id="attr-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="legend">
+          <div class="legend-title">
+            <h3>Flags explanation</h3>
+          </div>
+          <div class="legend-grid">
+            <div class="legend-item">
+              <span class="legend-chip">P</span>
+              <span>Prefailure warning</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip">O</span>
+              <span>Updated online</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip">S</span>
+              <span>Speed/performance</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip">R</span>
+              <span>Error rate</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip">C</span>
+              <span>Event count</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-chip">K</span>
+              <span>Auto-keep</span>
+            </div>
+          </div>
+          <p class="hint">Flags strings are shown as a compact POSRCK pattern, where missing flags are shown as dashes.</p>
+        </div>
+      </section>
+
+      <section class="output is-collapsed is-hidden" aria-live="polite">
+        <div class="output-header">
+          <h2>Raw JSON Result</h2>
+          <div class="output-actions">
+            <button id="json-copy" class="ghost icon-button" type="button" aria-label="Copy JSON">
+              <span class="icon" aria-hidden="true">
+                <i class="fa-regular fa-copy"></i>
+              </span>
+            </button>
+            <button id="json-toggle" class="ghost icon-button" type="button" aria-expanded="true">
+              <span class="icon" aria-hidden="true">
+                <i class="fa-solid fa-chevron-down"></i>
+              </span>
+            </button>
+          </div>
+        </div>
+        <pre id="output" class="output-body">{}</pre>
+      </section>
+      <footer class="footer">
+        <span>Open source on</span>
+        <a href="https://github.com/84634E1A607A/smartparsingtools" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </footer>
+    </div>
+
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>

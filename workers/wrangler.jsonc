@@ -1,0 +1,26 @@
+{
+	"name": "smart",
+	"compatibility_date": "2026-01-20",
+	"main": "index.js",
+	"minify": true,
+	"assets": {
+		"directory": "./webui",
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 1,
+			"invocation_logs": true
+		}
+	},
+	"preview_urls": false,
+	"workers_dev": false,
+	"routes": [
+		{
+			"pattern": "smart.aajax.top",
+			"zone_name": "aajax.top",
+			"custom_domain": true
+		}
+	]
+}

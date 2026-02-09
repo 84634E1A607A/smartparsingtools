@@ -90,3 +90,6 @@
 
 # Build directories
 /build*/
+
+# WASM dist
+/dist/

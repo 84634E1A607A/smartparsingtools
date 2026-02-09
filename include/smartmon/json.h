@@ -264,6 +264,9 @@ public:
       output(out, options);
     }
 
+  /// Render JSON tree as a string (JSON format).
+  std::string to_string(const output_options & options) const;
+
 private:
   struct node
   {

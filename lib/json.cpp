@@ -17,7 +17,7 @@
 #include <smartmon/utility.h> // regular_expression, uint128_*()
 
 #include <inttypes.h>
-
+#include <functional>
 #include <stdexcept>
 
 namespace smartmon {
@@ -31,6 +31,19 @@ static void jassert_failed(int line, const char * expr)
 }
 
 #define jassert(expr) (!(expr) ? jassert_failed(__LINE__, #expr) : (void)0)
+
+static void append_quoted_string(std::string & out, const char * s)
+{
+  out.push_back('"');
+  for (; *s; s++) {
+    char c = *s;
+    if ((unsigned char)c < 0x20 || c == '\\' || c == '"' || c == '/')
+      out += strprintf("\\u%04x", c & 0xff);
+    else
+      out.push_back(c);
+  }
+  out.push_back('"');
+}
 
 /* Convert to json "snake" format. It will contains only lower case ASCII
  * alphanumeric characters with all other characters replaced with the
@@ -774,6 +787,84 @@ void json::output(output_function & out, const output_options & options) const
       }
       break;
   }
+}
+
+std::string json::to_string(const output_options & options) const
+{
+  if (m_root_node.type == nt_unset)
+    return std::string();
+  jassert(m_root_node.type == nt_object);
+
+  std::string out;
+  const bool pretty = options.pretty;
+  const bool sorted = options.sorted;
+  std::function<void(const node *, int)> append_node;
+  append_node = [&](const node * p, int level) -> void {
+    bool is_obj = (p->type == nt_object);
+    switch (p->type) {
+      case nt_object:
+      case nt_array:
+        out.push_back(is_obj ? '{' : '[');
+        if (!p->childs.empty()) {
+          bool first = true;
+          for (node::const_iterator it(p, sorted); !it.at_end(); ++it) {
+            if (!first)
+              out.push_back(',');
+            if (pretty)
+              out += strprintf("\n%*s", (level + 1) * 2, "");
+            const node * p2 = *it;
+            if (!p2) {
+              jassert(!is_obj);
+              out += "null";
+            }
+            else {
+              jassert(is_obj == !p2->key.empty());
+              if (is_obj) {
+                out.push_back('"');
+                out += p2->key;
+                out += (pretty ? "\": " : "\":");
+              }
+              append_node(p2, level + 1);
+            }
+            first = false;
+          }
+          if (pretty)
+            out += strprintf("\n%*s", level * 2, "");
+        }
+        out.push_back(is_obj ? '}' : ']');
+        break;
+
+      case nt_bool:
+        out += (p->intval ? "true" : "false");
+        break;
+
+      case nt_int:
+        out += strprintf("%" PRId64, (int64_t)p->intval);
+        break;
+
+      case nt_uint:
+        out += strprintf("%" PRIu64, p->intval);
+        break;
+
+      case nt_uint128:
+        {
+          char buf[64];
+          out += uint128_hilo_to_str(buf, p->intval_hi, p->intval);
+        }
+        break;
+
+      case nt_string:
+        append_quoted_string(out, p->strval.c_str());
+        break;
+
+      default: jassert(false);
+    }
+  };
+
+  append_node(&m_root_node, 0);
+  if (options.pretty)
+    out.push_back('\n');
+  return out;
 }
 
 } // namespace smartmon
