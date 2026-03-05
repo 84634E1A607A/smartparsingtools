@@ -4,16 +4,15 @@
 #
 
 if REPRODUCIBLE_BUILD
-set_source_date_epoch = SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)
-def_source_date_epoch = -D$(set_source_date_epoch)
+@dot_export@ SOURCE_DATE_EPOCH
 if OS_DARWIN
-export ZERO_AR_DATE := 1
+ZERO_AR_DATE = 1
+@dot_export@ ZERO_AR_DATE
 endif
 endif
 
 # TODO: Remove SMARTMONTOOLS_SYSCONFDIR and SMARTMONTOOLS_DRIVEDBDIR dependency
 AM_CPPFLAGS = \
-        $(def_source_date_epoch) \
         -DBUILD_INFO='$(BUILD_INFO)' \
         -DSMARTMONTOOLS_SYSCONFDIR='"$(sysconfdir)"' \
          -I ../include -I$(top_srcdir)/include
