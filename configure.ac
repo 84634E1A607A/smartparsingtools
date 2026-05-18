@@ -382,6 +382,17 @@ AC_SUBST(attributelog)
 AC_SUBST(attributelogdir)
 AM_CONDITIONAL(ENABLE_ATTRIBUTELOG, [test -n "$attributelog"])
 
+jsonstate=
+AC_ARG_WITH(jsonstate,
+  [AS_HELP_STRING([--with-jsonstate@<:@=PREFIX|yes|no@:>@],
+    [Enable default smartd JSON state files [no] (yes=LOCALSTATEDIR/lib/smartmontools/smartd-json.)])],
+  [case "$withval" in yes) jsonstate='${localstatedir}/lib/${PACKAGE}/smartd-json.' ;;
+                      no) ;; *) jsonstate="$withval" ;; esac])
+jsonstatedir="${jsonstate%/*}"
+AC_SUBST(jsonstate)
+AC_SUBST(jsonstatedir)
+AM_CONDITIONAL(ENABLE_JSONSTATE, [test -n "$jsonstate"])
+
 AC_ARG_ENABLE(sample,
   [AS_HELP_STRING([--enable-sample], [Enables appending .sample to the installed smartd rc script and configuration file])],
   [smartd_suffix=; test "$enableval" = "yes" && smartd_suffix=".sample"],
@@ -503,17 +514,12 @@ case "$with_systemdenvfile:$cross_compiling:$systemdsystemunitdir" in
 esac
 AC_SUBST(systemdenvfile)
 
-# TODO: Remove when NVMe support is no longer EXPERIMENTAL
+# TODO: Remove after smartmontools 8.1
 AC_ARG_WITH(nvme-devicescan,
-  [AS_HELP_STRING([--with-nvme-devicescan@<:@=yes|no@:>@],
-    [Include NVMe devices in smartctl --scan and smartd DEVICESCAN [yes]])])
-
-# TODO: Remove after smartmontools 7.5
-AC_ARG_WITH(signal-func,
-  [AS_HELP_STRING([--with-signal-func], [(removed)])],
-  [AC_MSG_ERROR([
-The option '--with-signal-func' is no longer supported.  If this option is
-still needed, please inform $PACKAGE_BUGREPORT.
+  [AS_HELP_STRING([--with-nvme-devicescan], [(removed)])],
+  [test "$withval" != "no" || AC_MSG_ERROR([
+The option '--without-nvme-devicescan' is no longer supported.
+NVMe device scanning is now always enabled if supported.
 ])])
 
 AC_ARG_WITH(cxx11-option,
@@ -679,15 +685,12 @@ os_win32=no
 os_win32_mingw=no
 os_win64=no
 os_man_filter=
-os_nvme_devicescan=
-os_nvme_devicescan_changed=no
 case "${host}" in
   *-*-linux*)
     os_deps='os_linux.lo cciss.lo dev_areca.lo'
     os_dnsdomainname="'dnsdomainname' 'hostname -d'"
     os_nisdomainname="'nisdomainname' 'hostname -y' 'domainname'"
     os_man_filter=Linux
-    os_nvme_devicescan=yes
     ;;
   *-*-freebsd*|*-*-dragonfly*|*-*-kfreebsd*-gnu*|*-*-midnightbsd*)
     os_deps='os_freebsd.lo cciss.lo dev_areca.lo'
@@ -695,7 +698,6 @@ case "${host}" in
     os_dltools='fetch curl wget lynx'
     AC_CHECK_LIB(usb, libusb20_dev_get_device_desc)
     os_man_filter=FreeBSD
-    os_nvme_devicescan=yes
     ;;
   *-*-solaris*)
     os_deps='os_solaris.lo dev_legacy.lo' # TODO: migrate to new interface
@@ -707,9 +709,6 @@ case "${host}" in
     os_deps='os_netbsd.lo'
     os_libs='-lutil'
     os_man_filter=NetBSD
-    os_nvme_devicescan=yes
-    # TODO: Remove after smartmontools 7.5
-    os_nvme_devicescan_changed=yes
     ;;
   *-*-openbsd*)
     os_deps='os_openbsd.lo'
@@ -726,7 +725,6 @@ case "${host}" in
     os_nisdomainname=
     os_win32=yes
     os_man_filter=Cygwin
-    os_nvme_devicescan=yes
     ;;
   x86_64-*-mingw*)
     os_deps='os_win32.lo dev_areca.lo'
@@ -739,7 +737,6 @@ case "${host}" in
     os_win32_mingw=yes
     os_win64=yes
     os_man_filter=Windows
-    os_nvme_devicescan=yes
     ;;
   *-*-mingw*)
     os_deps='os_win32.lo dev_areca.lo'
@@ -748,14 +745,12 @@ case "${host}" in
     os_win32=yes
     os_win32_mingw=yes
     os_man_filter=Windows
-    os_nvme_devicescan=yes
     ;;
   *-*-darwin*)
     os_deps='os_darwin.lo'
     os_libs='-framework CoreFoundation -framework IOKit'
     os_darwin=yes
     os_man_filter=Darwin
-    os_nvme_devicescan=yes
     ;;
   *-*-nto-qnx*)
     os_deps='os_qnxnto.lo dev_legacy.lo' # TODO: migrate to new interface
@@ -782,19 +777,6 @@ if test "$os_posix" = "yes"; then
   AC_DEFINE(HAVE_POSIX_API, 1, [Define to 1 if the OS provides a POSIX API])
 fi
 AC_MSG_RESULT([$os_posix])
-
-# TODO: Remove when NVMe support is no longer EXPERIMENTAL
-case "$os_nvme_devicescan:${with_nvme_devicescan+set}" in
-  no:|yes:)
-    AC_MSG_CHECKING([whether NVMe device scanning could be safely enabled])
-    with_nvme_devicescan=$os_nvme_devicescan
-    AC_MSG_RESULT([$os_nvme_devicescan])
-    os_nvme_devicescan=used ;;
-esac
-AC_SUBST(with_nvme_devicescan)
-if test "$with_nvme_devicescan" = "yes"; then
-  AC_DEFINE(WITH_NVME_DEVICESCAN, 1, [Define to 1 to include NVMe devices in smartd DEVICESCAN.])
-fi
 
 AC_SUBST([os_deps])
 AC_SUBST([os_libs])
@@ -1031,7 +1013,9 @@ info=`
       if test -n "$attributelog"; then
         echo "smartd attribute logs:  \`eval eval eval echo $attributelog\`MODEL-SERIAL.TYPE.csv"
       fi
-      echo "NVMe DEVICESCAN:        ${with_nvme_devicescan-no}"
+      if test -n "$jsonstate"; then
+        echo "smartd JSON state:      \`eval eval eval echo $jsonstate\`MODEL-SERIAL.TYPE.json"
+      fi
       ;;
 
     *)
@@ -1103,13 +1087,17 @@ info=`
       else
         echo "smartd attribute logs:  [[disabled]]"
       fi
+      if test -n "$jsonstate"; then
+        echo "smartd JSON state:      \`eval eval eval echo $jsonstate\`MODEL-SERIAL.TYPE.json"
+      else
+        echo "smartd JSON state:      [[disabled]]"
+      fi
       case "$host_os" in
         linux*)
           echo "SELinux support:        ${with_selinux-no}"
           echo "libcap-ng support:      $use_libcap_ng"
           echo "systemd notify support: $use_libsystemd" ;;
       esac
-      echo "NVMe DEVICESCAN:        ${with_nvme_devicescan-[[not implemented]]}"
       ;;
   esac
   echo "-----------------------------------------------------------------------------"
@@ -1119,28 +1107,11 @@ AC_MSG_NOTICE([
 $info
 ])
 
-# TODO: Remove when NVMe support is no longer EXPERIMENTAL
-case "$os_nvme_devicescan:$with_nvme_devicescan:$os_nvme_devicescan_changed" in
-  used:yes:yes) AC_MSG_WARN([
-The default for the inclusion of NVME devices in smartd.conf
-'DEVICESCAN' and 'smartctl --scan' has been changed to 'yes' on
-this platform.
-Use option '--with-nvme-devicescan' to suppress this warning.
-])  ;;
-  used:no:*) AC_MSG_WARN([
-This version of smartmontools provides NVMe support which is still
-EXPERIMENTAL.  NVMe devices are not yet included in smartd.conf
-'DEVICESCAN' and 'smartctl --scan' unless '-d nvme' is specified.
-Use option '--with-nvme-devicescan' to include NVMe devices.
-Use option '--without-nvme-devicescan' to suppress this warning.
-])  ;;
-  yes:no:*) AC_MSG_WARN([
-The default for the inclusion of NVME devices in smartd.conf
-'DEVICESCAN' and 'smartctl --scan' is 'yes' on this platform.
-If option '--without-nvme-devicescan' is still needed, please inform
-$PACKAGE_BUGREPORT - Thanks!
-])  ;;
-esac
+# TODO: Remove after smartmontools 8.1
+test -z "$with_nvme_devicescan" || AC_MSG_WARN([
+The option '--with-nvme-devicescan' is no longer required.
+NVMe device scanning is now always enabled if supported.
+])
 
 case "$host_os:$with_libsystemd:$use_libsystemd:$PKG_CONFIG" in
   linux*:auto:no:?*)
