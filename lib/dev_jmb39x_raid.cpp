@@ -341,7 +341,8 @@ private:
 
   bool raw_read(uint8_t (& data)[512]);
   bool raw_write(const uint8_t (& data)[512]);
-  bool run_jmb_command(const uint8_t * cmd, unsigned cmdsize, uint8_t (& response)[512]);
+  bool run_jmb_command(const uint8_t * cmd, unsigned cmdsize, uint8_t (& response)[512],
+    const uint8_t * data_out = nullptr, unsigned data_out_size = 0);
   void report_orig_data_lost() const;
   bool restore_orig_data();
 };
@@ -399,11 +400,25 @@ bool jmb39x_device::raw_write(const uint8_t (& data)[512])
   return true;
 }
 
-bool jmb39x_device::run_jmb_command(const uint8_t * cmd, unsigned cmdsize, uint8_t (& response)[512])
+bool jmb39x_device::run_jmb_command(const uint8_t * cmd, unsigned cmdsize, uint8_t (& response)[512],
+  const uint8_t * data_out, unsigned data_out_size)
 {
   // Set up request
   uint8_t request[512];
   jmb_set_request_sector(request, m_version, m_cmd_id, cmd, cmdsize);
+
+  // For DATA OUT: embed data in request sector at offset 32 (after header + command)
+  // Available space: 512 - 32 (header) - 4 (CRC) = 476 bytes
+  if (data_out && data_out_size > 0) {
+    unsigned max_data = sizeof(request) - 32 - 4;
+    if (data_out_size > max_data)
+      data_out_size = max_data;
+    memcpy(request + 32, data_out, data_out_size);
+    // Recalculate CRC since we modified the request
+    jmb_put_crc(request, jmb_crc(request));
+    if (ata_debugmode)
+      lib_printf("JMB39x: DATA OUT %u bytes embedded in request\n", data_out_size);
+  }
 
   if (ata_debugmode) {
     lib_printf("JMB39x: Write request sector #%d\n", m_cmd_id);
@@ -596,6 +611,12 @@ bool jmb39x_device::close()
 }
 
 // Return: 0=unsupported, 1=supported, 2=supported and has checksum
+//
+// JMB39x/JMS56x controller limitations:
+// - Output register reading not supported (no SMART STATUS check via registers)
+// - Multi-sector SMART READ LOG not supported (max 464 bytes per transfer)
+// - Data truncated to 464 bytes (512 - 32 header - 16 footer)
+// - JMS56x: DATA OUT commands (e.g. SCT, TRIM) not supported by controller firmware
 static int is_supported_by_jmb(const ata_in_regs & r)
 {
   switch (r.command) {
@@ -606,17 +627,74 @@ static int is_supported_by_jmb(const ata_in_regs & r)
         case ATA_SMART_READ_VALUES:
         case ATA_SMART_READ_THRESHOLDS:
           return 2;
+        case ATA_SMART_IMMEDIATE_OFFLINE: // NO DATA self-test command
+          return 1;
         case ATA_SMART_READ_LOG_SECTOR:
           switch (r.lba_low) {
             case 0x00: return 1; // Log directory
             case 0x01: return 2; // Summary Error log
+            case 0x06: return 1; // Self-test log
+            case 0xe0: return 1; // SCT Command/Status
+            case 0xe1: return 1; // SCT Data Table
+          }
+          break;
+        case ATA_SMART_WRITE_LOG_SECTOR: // DATA OUT
+          switch (r.lba_low) {
             case 0xe0: return 1; // SCT Command/Status
           }
           break;
       }
       break;
+    case ATA_READ_LOG_EXT:
+      return 1; // 48-bit READ LOG EXT for GP logs
   }
   return 0;
+}
+
+
+// Fix self-test log mostrecenttest index truncated by JMB39x protocol.
+// The index is at byte 508 which is beyond the 464-byte data window.
+// Reconstruct it by finding the entry with highest power-on hours.
+static void jmb_fix_selftest_log_index(void * buffer)
+{
+  uint8_t * data = (uint8_t *)buffer;
+  uint8_t mostrecenttest = data[508];
+
+  // If index is already set, nothing to do
+  if (mostrecenttest != 0)
+    return;
+
+  // Check if there are any non-empty entries
+  bool has_entries = false;
+  for (int i = 0; i < 21; i++) {
+    if (nonempty(data + 2 + i * 24, 24)) {
+      has_entries = true;
+      break;
+    }
+  }
+  if (!has_entries)
+    return;
+
+  // Find entry with highest power-on hours (circular buffer heuristic).
+  // Power-on hours is at offset 4-5 (16-bit LE) within each 24-byte entry.
+  int best_idx = -1;
+  unsigned best_hours = 0;
+  for (int i = 0; i < 21; i++) {
+    uint8_t * entry = data + 2 + i * 24;
+    if (!nonempty(entry, 24))
+      continue;
+    unsigned hours = entry[4] | (entry[5] << 8);
+    if (best_idx < 0 || hours > best_hours) {
+      best_hours = hours;
+      best_idx = i;
+    }
+  }
+
+  if (best_idx >= 0) {
+    data[508] = best_idx + 1;  // mostrecenttest is 1-based index
+    if (ata_debugmode)
+      lib_printf("JMB39x: Reconstructed self-test log index = %d (hours = %u)\n", best_idx + 1, best_hours);
+  }
 }
 
 bool jmb39x_device::ata_pass_through(const ata_cmd_in & in, ata_cmd_out & /* out */)
@@ -624,39 +702,47 @@ bool jmb39x_device::ata_pass_through(const ata_cmd_in & in, ata_cmd_out & /* out
   jmbassert(is_open());
   if (m_blocked)
     return set_err(EIO, "Device blocked due to previous errors");
-  if (in.direction == ata_cmd_in::no_data) // TODO: add to ata_cmd_is_supported() ?
-    return set_err(ENOSYS, "NO DATA ATA commands not implemented [JMB39x]");
-  if (!ata_cmd_is_supported(in, 0, "JMB39x"))
+  // NO DATA commands (e.g. SMART self-test) now supported with ata_read_size=0x01
+  bool is_no_data = (in.direction == ata_cmd_in::no_data);
+  bool is_data_out = (in.direction == ata_cmd_in::data_out);
+  if (!ata_cmd_is_supported(in, ata_device::supports_48bit | ata_device::supports_data_out, "JMB39x"))
     return false;
   // Block all commands which require full sector data
   int supported = is_supported_by_jmb(in.in_regs);
   if (!supported)
-    return set_err(ENOSYS, "ATA command not implemented due to truncated response [JMB39x]");
-  jmbassert(in.direction == ata_cmd_in::data_in);
+    return set_err(ENOSYS, "ATA command not supported [JMB39x]");
+  jmbassert(is_no_data || is_data_out || in.direction == ata_cmd_in::data_in);
 
   // Run ATA pass-through command
+  // ata_read_size: 0x01 for NO DATA, 0x02 for DATA IN, 0x03 for DATA OUT
+  // ata_read_addr: 0x00 for NO DATA, 0xe0 for DATA IN/OUT
+  uint8_t ata_read_size = is_no_data ? 0x01 : (is_data_out ? 0x03 : 0x02);
+  uint8_t ata_read_addr = is_no_data ? 0x00 : 0xe0;
   uint8_t cmd[24]= {
     0x00, 0x02, 0x03, 0xff,
     m_port,
-    0x02, 0x00, 0xe0, 0x00, 0x00,
-    // Registers
+    ata_read_size, 0x00, ata_read_addr, 0x00, 0x00,
+    // Registers (low byte, high byte for 48-bit)
     in.in_regs.features,
-    0x00,
+    in.in_regs.prev.features,
     in.in_regs.sector_count,
-    0x00,
+    in.in_regs.prev.sector_count,
     in.in_regs.lba_low,
-    0x00,
+    in.in_regs.prev.lba_low,
     in.in_regs.lba_mid,
-    0x00,
+    in.in_regs.prev.lba_mid,
     in.in_regs.lba_high,
-    0x00,
+    in.in_regs.prev.lba_high,
     0xa0, // in.in_regs.device ?
     0x00,
     in.in_regs.command,
     0x00 // status register returned here
   };
   uint8_t response[512];
-  if (!run_jmb_command(cmd, sizeof(cmd), response))
+  // For DATA OUT, pass the buffer data to embed in request sector
+  const uint8_t * data_out_ptr = is_data_out ? (const uint8_t *)in.buffer : nullptr;
+  unsigned data_out_size = is_data_out ? in.size : 0;
+  if (!run_jmb_command(cmd, sizeof(cmd), response, data_out_ptr, data_out_size))
     return false;
 
   // Check status register
@@ -668,14 +754,24 @@ bool jmb39x_device::ata_pass_through(const ata_cmd_in & in, ata_cmd_out & /* out
   if ((status & 0xc1) != 0x40 /* !(!BSY && DRDY && !ERR) */)
     return set_err(EIO, "ATA command failed (status=0x%02x)", status);
 
-  // Copy data
-  jmbassert(in.size == sizeof(response));
-  memset(in.buffer, 0, in.size);
-  memcpy(in.buffer, response + 32, in.size - 32 - 16);
+  // Copy data (only for DATA IN commands)
+  if (!is_no_data) {
+    jmbassert(in.size == sizeof(response));
+    memset(in.buffer, 0, in.size);
+    memcpy(in.buffer, response + 32, in.size - 32 - 16);
+  }
 
-  // Prevent checksum warning
-  if (supported > 1)
+  // Prevent checksum warning (only for DATA IN commands)
+  if (!is_no_data && supported > 1)
     ((uint8_t *)in.buffer)[512-1] -= checksum(in.buffer);
+
+
+  // JMB39x truncates data to 464 bytes (512 - 32 header - 16 footer).
+  // For self-test log (lba_low 0x06), fix the mostrecenttest index at byte 508.
+  if (!is_no_data && in.in_regs.command == ATA_SMART_CMD
+      && in.in_regs.features == ATA_SMART_READ_LOG_SECTOR && in.in_regs.lba_low == 0x06) {
+    jmb_fix_selftest_log_index(in.buffer);
+  }
 
   return true;
 }
