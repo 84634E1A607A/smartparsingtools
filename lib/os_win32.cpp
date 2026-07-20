@@ -4085,21 +4085,40 @@ private:
 
 /////////////////////////////////////////////////////////////////////////////
 
-#ifndef _WIN64
-// Running on 64-bit Windows as 32-bit app ?
-static bool is_wow64()
+template <typename F>
+static inline F * get_proc_address(HMODULE module, const char * name)
 {
-  BOOL (WINAPI * IsWow64Process_p)(HANDLE, PBOOL) =
-    (BOOL (WINAPI *)(HANDLE, PBOOL))(void *)
-    GetProcAddress(GetModuleHandleA("kernel32.dll"), "IsWow64Process");
-  if (!IsWow64Process_p)
-    return false;
-  BOOL w64 = FALSE;
-  if (!IsWow64Process_p(GetCurrentProcess(), &w64))
-    return false;
-  return !!w64;
+  return reinterpret_cast<F *>(reinterpret_cast<void *>(GetProcAddress(module, name)));
 }
-#endif // _WIN64
+
+// Return "(64)" if running as x86 on x86_64, "(arm64)" if x86[_64] is emulated on arm64,
+// "" otherwise.
+static const char * get_wow64()
+{
+#if !(defined(__aarch64__) /*GCC*/ || defined(_M_ARM64) /*MSVC*/)
+  HMODULE kernel = GetModuleHandleA("kernel32.dll");
+  auto IsWow64Process2_p = get_proc_address<BOOL WINAPI (HANDLE, USHORT *, USHORT *)>(
+    kernel, "IsWow64Process2" // >= Windows 10
+  );
+  HANDLE currproc = GetCurrentProcess();
+  USHORT process_arch = 0, native_arch = 0;
+  if (   IsWow64Process2_p
+      && IsWow64Process2_p(currproc, &process_arch, &native_arch)
+      && native_arch == 0xaa64 /* IMAGE_FILE_MACHINE_ARM64 */    )
+    return "(arm64)";
+
+#ifndef _WIN64
+  auto IsWow64Process_p = get_proc_address<BOOL WINAPI (HANDLE, PBOOL)>(
+    kernel, "IsWow64Process" // >= Windows XP SP2
+  );
+  BOOL w64 = FALSE;
+  if (IsWow64Process_p && IsWow64Process_p(currproc, &w64) && w64)
+    return "(64)";
+#endif // !_WIN64
+
+#endif // !(__aarch64__ || _M_ARM64)
+  return "";
+}
 
 // Return info string about build host and OS version
 std::string win_smart_interface::get_os_version_str()
@@ -4114,10 +4133,9 @@ std::string win_smart_interface::get_os_version_str()
 
   // Starting with Windows 8.1, GetVersionEx() does no longer report the
   // actual OS version.  RtlGetVersion() is not affected.
-  LONG /*NTSTATUS*/ (WINAPI /*NTAPI*/ * RtlGetVersion_p)(LPOSVERSIONINFOEXW) =
-    (LONG (WINAPI *)(LPOSVERSIONINFOEXW))(void *)
-    GetProcAddress(GetModuleHandleA("ntdll.dll"), "RtlGetVersion");
-
+  auto RtlGetVersion_p = get_proc_address<LONG WINAPI (LPOSVERSIONINFOEXW)>(
+    GetModuleHandleA("ntdll.dll"), "RtlGetVersion"
+  );
   OSVERSIONINFOEXW vi; memset(&vi, 0, sizeof(vi));
   vi.dwOSVersionInfoSize = sizeof(vi);
   if (!RtlGetVersion_p || RtlGetVersion_p(&vi)) {
@@ -4167,6 +4185,7 @@ std::string win_smart_interface::get_os_version_str()
           case 22631:   w = "w11-23H2"; break;
           case 26100:   w = "w11-24H2"; break;
           case 26200:   w = "w11-25H2"; break;
+          case 26300:   w = "w11-26H2"; break;
           default:      w = (vi.dwBuildNumber < 22000
                           ? "w10"
                           : "w11");
@@ -4196,12 +4215,7 @@ std::string win_smart_interface::get_os_version_str()
     }
   }
 
-  const char * w64 = "";
-#ifndef _WIN64
-  if (is_wow64())
-    w64 = "(64)";
-#endif
-
+  const char * w64 = get_wow64();
   if (!w)
     snprintf(vptr, vlen, "-%s%u.%u%s",
       (vi.dwPlatformId==VER_PLATFORM_WIN32_NT ? "nt" : "??"),
@@ -4820,9 +4834,9 @@ void smart_interface::init()
   {
     // Remove "." from DLL search path if supported
     // to prevent DLL preloading attacks
-    BOOL (WINAPI * SetDllDirectoryA_p)(LPCSTR) =
-      (BOOL (WINAPI *)(LPCSTR))(void *)
-      GetProcAddress(GetModuleHandleA("kernel32.dll"), "SetDllDirectoryA");
+    auto SetDllDirectoryA_p = os_win32::get_proc_address<BOOL WINAPI (LPCSTR)>(
+      GetModuleHandleA("kernel32.dll"), "SetDllDirectoryA" // >= Windows XP SP1
+    );
     if (SetDllDirectoryA_p)
       SetDllDirectoryA_p("");
   }
