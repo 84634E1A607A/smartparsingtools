@@ -216,7 +216,7 @@ ENABLE/DISABLE, DISPLAY DATA, RUN/ABORT TESTS.
 Prints a usage message to STDOUT and exits.
 .TP
 .B \-V, \-\-version, \-\-copyright, \-\-license
-Prints version, copyright, license, home page and SVN revision
+Prints version, copyright, license, home page and git revision
 information for your copy of \fBsmartctl\fP to STDOUT and then exits.
 .TP
 .B \-i, \-\-info
@@ -1413,6 +1413,13 @@ Only the 16 most recent log entries are printed by default.
 This number can be changed by the optional parameter NUM.
 The maximum number of log entries is vendor specific
 (in the range from 1 to 256 inclusive).
+.br
+[NEW EXPERIMENTAL SMARTCTL 8.0 FEATURE]
+If a device reports only a maximum of one, it is assumed that this log is
+not supported.
+This log is mandatory but some (USB-)devices which emulate NVMe SMART/Health
+Information do not provide it.
+This decision could be overridden with the option \*(Aq\-l error,1\*(Aq\.
 .Sp
 Note that the contents of this log is not preserved across power cycles or
 controller resets, but the value of \*(AqError Information Log Entries\*(Aq
@@ -1984,11 +1991,12 @@ lists all entries matching MODEL, and the command:
 lists all entries for this MODEL and a specific FIRMWARE version.
 .TP
 .B \-B [+]FILE, \-\-drivedb=[+]FILE
-[ATA only] Read the drive database from FILE.  The new database replaces
-the built in database by default.  If \*(Aq+\*(Aq is specified, then the new
-entries prepend the built in entries.
+[ATA][USB] Read the drive database from FILE.
+If \*(Aq+\*(Aq is not specified, the drive database is replaced.
+Otherwise the entries read from FILE prepend the local and global entries
+described below.
 .Sp
-Optional entries are read from the file
+The local entries are read from
 .\" %IF NOT OS Windows
 \fB/usr/local/etc/smart_drivedb.h\fP
 .\" %ENDIF NOT OS Windows
@@ -1999,9 +2007,10 @@ Optional entries are read from the file
 .\"! \fBEXEDIR/drivedb-add.h\fP
 .\" %ENDIF OS Windows
 .\" %IF ENABLE_DRIVEDB
-if this option is not specified.
+if present.
+Otherwise no local entries are used.
 .Sp
-If
+The global entries are read from
 .\" %IF NOT OS Windows
 \fB/usr/local/var/lib/smartmontools/drivedb.h\fP
 .\" %ENDIF NOT OS Windows
@@ -2011,7 +2020,9 @@ If
 .\" %IF OS Windows
 .\"! \fBEXEDIR/drivedb.h\fP
 .\" %ENDIF OS Windows
-is present, the contents of this file is used instead of the built in table.
+if present.
+Otherwise the global entries are initialized from an older version of the
+database file built in at compile time.
 .\" %IF ENABLE_UPDATE_SMART_DRIVEDB
 .Sp
 Run
@@ -2024,7 +2035,7 @@ Run
 .\" %IF OS Windows
 .\"! \fBEXEDIR/update-smart-drivedb.ps1\fP
 .\" %ENDIF OS Windows
-to update this file from the smartmontools SVN repository.
+to update the database file from the smartmontools repository.
 .\" %ENDIF ENABLE_UPDATE_SMART_DRIVEDB
 .\" %ENDIF ENABLE_DRIVEDB
 .Sp

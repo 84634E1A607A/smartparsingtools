@@ -376,6 +376,7 @@ MAN_FILTER = { \
     sed -e "s|@SMARTMONTOOLS_GIT_VER_DESC@|$$SMARTMONTOOLS_GIT_VER_DESC|g" \
         -e "s|@SMARTMONTOOLS_GIT_REV_DATE@|$${SMARTMONTOOLS_GIT_REV_DATE:--}|g" \
         -e "s|@SMARTMONTOOLS_GIT_REV@|$${SMARTMONTOOLS_GIT_REV:--}|g" \
+        -e 's|\.ft CW$$|.ft $(troff_cw_font)|' \
         -e 's|/usr/local/share/man/|$(mandir)/|g' \
         -e 's|/usr/local/sbin/|$(sbindir)/|g' \
         -e 's|/usr/local/share/doc/smartmontools/examplescripts/|!exampledir!|g' \
@@ -477,8 +478,7 @@ SOLARIS_MAN_FILTER = \
     sed -e '/^\.TH/s, \([58]\) , !!\1!! ,' \
         -e '/^\.BR/s, (\([578]\)), (!!\1!!),' \
         -e 's,\\fP(\([578]\)),\\fP(!!\1!!),g' \
-        -e 's,!!5!!,4,g' -e 's,!!7!!,5,g' -e 's,!!8!!,1m,g' \
-        -e 's,/var/log/messages,/var/adm/messages,g'
+        -e 's,!!5!!,4,g' -e 's,!!7!!,5,g' -e 's,!!8!!,1m,g'
 
 smartctl.1m: smartctl.8
 	$(ECHO_V_GEN) ' $$(SOLARIS_MAN_FILTER) < smartctl.8 > $@'
@@ -878,7 +878,7 @@ CONFIG_VC_FILTER = { \
     fi && \
     echo '/* os_win32/vc$(vcver)/[smartmon_]config.h.  Generated from [smartmon_]config.h by Makefile.  */' && \
     sed -e 's/^\#define \([SMARTON_]*HAVE_\(ATTR_PACKED\|__INT128\|LONG_DOUBLE_WIDER\|STRINGS_H\|UNISTD_H\)\) 1.*$$/\/* \#undef \1 *\/ \/* VC$(vcver) *\//' \
-        -e 's/^\(\#define SMARTMONTOOLS_BUILD_HOST "[^-]*\)[^"].*$$/\1-pc-w32vc$(vcver)"/'; }
+        -e 's/^\(\#define SMARTMONTOOLS_BUILD_HOST "\)[^"]*/\1unknown-pc-w32vc/'; }
 
 $(srcdir)/os_win32/vc$(vcver)/config.h: ../config.h Makefile
 	$(ECHO_V_GEN) ' $$(CONFIG_VC_FILTER) < ../config.h > $@.tmp'
