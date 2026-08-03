@@ -5,7 +5,7 @@
  *
  * Copyright (C) 1999-2000 Michael Cornwell <cornwell@acm.org>
  * Copyright (C) 2002-2011 Bruce Allen
- * Copyright (C) 2008-2025 Christian Franke
+ * Copyright (C) 2008-2026 Christian Franke
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -209,8 +209,9 @@ extern unsigned char ata_debugmode;
 extern bool dont_print_serial_number;
 
 // Get information from drive
-int ata_read_identity(ata_device * device, ata_identify_device * buf, bool fix_swapped_id,
-                      unsigned char * raw_buf = 0);
+int ata_read_identity(ata_device * device, ata_identify_device & id,
+                      bool fix_swapped_id = false);
+
 int ataCheckPowerMode(ata_device * device);
 
 // Issue a no-data ATA command with optional sector count register value
@@ -312,6 +313,40 @@ int ataIsSmartEnabled(const ata_identify_device * drive);
 
 int ataSmartStatus2(ata_device * device);
 
+// Get reference to modify word N from `ata_identify_device.words*[]` arrays.
+// Does not compile for the other fields.
+template <int N>
+static inline uint16_t & ata_set_id_word(ata_identify_device & id)
+{
+  SMARTMON_STATIC_ASSERT(   (  0 <= N && N <=   9) || ( 20 <= N && N <=  22)
+                         || ( 47 <= N && N <=  59) || ( 62 <= N && N <=  79)
+                         || ( 88 <= N && N <=  99) || (104 <= N && N <= 169)
+                         || (174 <= N && N <= 229) || (234 <= N && N <= 255));
+  if (N < 20)
+    return id.words000_009[N];
+  else if (N < 47)
+    return id.words020_022[N -  20];
+  else if (N < 62)
+    return id.words047_059[N -  47];
+  else if (N < 88)
+    return id.words062_079[N -  62];
+  else if (N < 104)
+    return id.words088_099[N -  88];
+  else if (N < 174)
+    return id.words104_169[N - 104];
+  else if (N < 234)
+    return id.words174_229[N - 174];
+  else
+    return id.words234_255[N - 234];
+}
+
+// Get const reference to word N from `ata_identify_device.words*[]` arrays.
+template <int N>
+static inline const uint16_t & ata_get_id_word(const ata_identify_device & id)
+{
+  return ata_set_id_word<N>(const_cast<ata_identify_device &>(id));
+}
+
 bool isSmartErrorLogCapable(const ata_smart_values * data, const ata_identify_device * identity);
 
 bool isSmartTestLogCapable(const ata_smart_values * data, const ata_identify_device * identity);
@@ -347,16 +382,16 @@ inline bool isSupportSelectiveSelfTest(const ata_smart_values * data)
   { return !!(data->offline_data_collection_capability & 0x40); }
 
 inline bool isSCTCapable(const ata_identify_device *drive)
-  { return !!(drive->words088_255[206-88] & 0x01); } // 0x01 = SCT support
+  { return !!(ata_get_id_word<206>(*drive) & 0x01); } // 0x01 = SCT support
 
 inline bool isSCTErrorRecoveryControlCapable(const ata_identify_device *drive)
-  { return ((drive->words088_255[206-88] & 0x09) == 0x09); } // 0x08 = SCT Error Recovery Control support
+  { return ((ata_get_id_word<206>(*drive) & 0x09) == 0x09); } // 0x08 = SCT Error Recovery Control support
 
 inline bool isSCTFeatureControlCapable(const ata_identify_device *drive)
-  { return ((drive->words088_255[206-88] & 0x11) == 0x11); } // 0x10 = SCT Feature Control support
+  { return ((ata_get_id_word<206>(*drive) & 0x11) == 0x11); } // 0x10 = SCT Feature Control support
 
 inline bool isSCTDataTableCapable(const ata_identify_device *drive)
-  { return ((drive->words088_255[206-88] & 0x21) == 0x21); } // 0x20 = SCT Data Table support
+  { return ((ata_get_id_word<206>(*drive) & 0x21) == 0x21); } // 0x20 = SCT Data Table support
 
 int TestTime(const ata_smart_values * data, int testtype);
 
@@ -448,15 +483,31 @@ struct ata_size_info
 
 void ata_get_size_info(const ata_identify_device * id, ata_size_info & sizes);
 
-// Convenience function for formatting strings from ata_identify_device.
-void ata_format_id_string(char * out, const unsigned char * in, int n);
-
 // Utility routines.
 unsigned char checksum(const void * data);
 
 // Returns the name of the command (and possibly sub-command) with the given
 // command code and feature register values.
 const char * look_up_ata_command(unsigned char c_code, unsigned char f_reg);
+
+// Byteswap strings in identify_device data.
+void ata_byteswap_id_strings_inplace(ata_identify_device & id, bool all = true);
+
+// Byteswap all aligned integers on Big Endian platforms, do nothing otherwise.
+void ata_if_be_byteswap_inplace(ata_identify_device & id);
+void ata_if_be_byteswap_inplace(ata_smart_values & val);
+void ata_if_be_byteswap_inplace(ata_smart_thresholds_pvt & thr);
+void ata_if_be_byteswap_inplace(ata_smart_log_directory & log);
+void ata_if_be_byteswap_inplace(ata_smart_errorlog & log);
+void ata_if_be_byteswap_inplace(ata_smart_selftestlog & log);
+void ata_if_be_byteswap_inplace(ata_smart_exterrlog * log, unsigned num_sectors);
+void ata_if_be_byteswap_inplace(ata_smart_extselftestlog * log, unsigned num_sectors);
+void ata_if_be_byteswap_inplace(ata_selective_self_test_log & log);
+void ata_if_be_byteswap_inplace(ata_sct_status_response & sts);
+void ata_if_be_byteswap_inplace(ata_sct_data_table_command & cmd);
+void ata_if_be_byteswap_inplace(ata_sct_temperature_history_table & tmh);
+void ata_if_be_byteswap_inplace(ata_sct_feature_control_command & cmd);
+void ata_if_be_byteswap_inplace(ata_sct_error_recovery_control_command & cmd);
 
 // Return pseudo-device to parse "smartctl -r ataioctl,2 ..." output
 // and simulate an ATA device with same behaviour

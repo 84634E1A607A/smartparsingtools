@@ -3,7 +3,7 @@
  *
  * Home page of code is: https://www.smartmontools.org
  *
- * Copyright (C) 2008-21 Christian Franke
+ * Copyright (C) 2008-26 Christian Franke
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -20,19 +20,22 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-// Legacy interface declarations (now commented out globally):
+// Legacy interface declarations
 
 // from utility.h:
+#define CONTROLLER_UNKNOWN  0x00
+#define CONTROLLER_ATA      0x01
+#define CONTROLLER_SCSI     0x02
 int guess_device_type(const char * dev_name);
 int make_device_names (char ***devlist, const char* name);
 int deviceopen(const char *pathname, char *type);
 int deviceclose(int fd);
 
 // from atacmds.h:
-int ata_command_interface(int device, smart_command_set command, int select, char *data);
+int ata_command_interface(int device, smartmon::smart_command_set command, int select, char *data);
 
 // from scsicmds.h:
-int do_scsi_cmnd_io(int dev_fd, struct scsi_cmnd_io * iop, int report);
+int do_scsi_cmnd_io(int dev_fd, struct smartmon::scsi_cmnd_io * iop, int report);
 
 // from smartctl.h:
 void print_smartctl_examples();
@@ -115,7 +118,7 @@ public:
   legacy_ata_device(smart_interface * intf, const char * dev_name, const char * req_type);
 
 protected:
-  virtual int ata_command_interface(smart_command_set command, int select, char * data);
+  virtual int ata_command_interface(smart_command_set command, int select, char * data) override;
 };
 
 legacy_ata_device::legacy_ata_device(smart_interface * intf, const char * dev_name, const char * req_type)

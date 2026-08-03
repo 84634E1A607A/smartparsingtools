@@ -3,9 +3,9 @@
  *
  * Home page of code is: https://www.smartmontools.org
  *
- * Copyright (C) 2002-11 Bruce Allen
- * Copyright (C) 2008-25 Christian Franke
  * Copyright (C) 1999-2000 Michael Cornwell <cornwell@acm.org>
+ * Copyright (C) 2002-2011 Bruce Allen
+ * Copyright (C) 2008-2026 Christian Franke
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -649,9 +649,9 @@ static void print_drive_info(const ata_identify_device * drive,
 {
   // format drive information (with byte swapping as needed)
   char model[40+1], serial[20+1], firmware[8+1];
-  ata_format_id_string(model, drive->model, sizeof(model)-1);
-  ata_format_id_string(serial, drive->serial_no, sizeof(serial)-1);
-  ata_format_id_string(firmware, drive->fw_rev, sizeof(firmware)-1);
+  format_char_array(model, drive->model);
+  format_char_array(serial, drive->serial_no);
+  format_char_array(firmware, drive->fw_rev);
 
   // Print model family if known
   if (dbentry && *dbentry->modelfamily) {
@@ -678,9 +678,9 @@ static void print_drive_info(const ata_identify_device * drive,
 
   // Additional Product Identifier (OEM Id) string in words 170-173
   // (e08130r1, added in ACS-2 Revision 1, December 17, 2008)
-  if (0x2020 <= drive->words088_255[170-88] && drive->words088_255[170-88] <= 0x7e7e) {
+  if (' ' <= drive->add_product_id[0] && drive->add_product_id[0] <= '~') {
     char add[8+1];
-    ata_format_id_string(add, (const unsigned char *)(drive->words088_255+(170-88)), sizeof(add)-1);
+    format_char_array(add, drive->add_product_id);
     if (add[0]) {
       jout("Add. Product Id:  %s\n", add);
       jglb["ata_additional_product_id"] = add;
@@ -726,7 +726,7 @@ static void print_drive_info(const ata_identify_device * drive,
   }
 
   // Print form factor if reported
-  unsigned short word168 = drive->words088_255[168-88];
+  uint16_t word168 = ata_get_id_word<168>(*drive);
   if (word168) {
     const char * form_factor = get_form_factor(word168);
     if (form_factor)
@@ -739,8 +739,8 @@ static void print_drive_info(const ata_identify_device * drive,
   }
 
   // Print TRIM support
-  bool trim_sup = !!(drive->words088_255[169-88] & 0x0001);
-  unsigned short word069 = drive->words047_079[69-47];
+  bool trim_sup = !!(ata_get_id_word<169>(*drive) & 0x0001);
+  uint16_t word069 = ata_get_id_word<69>(*drive);
   bool trim_det = !!(word069 & 0x4000), trim_zeroed = !!(word069 & 0x0020);
   if (trim_sup || rpm == 1) // HDD: if supported (SMR), SSD: always
     jout("TRIM Command:     %s%s%s\n",
@@ -803,7 +803,7 @@ static void print_drive_info(const ata_identify_device * drive,
   }
 
   // Print Transport specific version
-  unsigned short word222 = drive->words088_255[222-88];
+  uint16_t word222 = ata_get_id_word<222>(*drive);
   if (word222 != 0x0000 && word222 != 0xffff) switch (word222 >> 12) {
     case 0x0: // PATA
       {
@@ -813,8 +813,8 @@ static void print_drive_info(const ata_identify_device * drive,
       break;
     case 0x1: // SATA
       print_sata_version_and_speed(word222,
-                                   drive->words047_079[76-47],
-                                   drive->words047_079[77-47]);
+                                   ata_get_id_word<76>(*drive),
+                                   ata_get_id_word<77>(*drive));
       break;
     case 0xe: // PCIe (ACS-4)
       pout("Transport Type:   PCIe (0x%03x)\n", word222 & 0x0fff);
@@ -1382,7 +1382,7 @@ static void PrintSmartAttribWithThres(const ata_smart_values * data,
 // Print SMART related SCT capabilities
 static void ataPrintSCTCapability(const ata_identify_device *drive)
 {
-  unsigned short sctcaps = drive->words088_255[206-88];
+  uint16_t sctcaps = ata_get_id_word<206>(*drive);
   if (!(sctcaps & 0x01))
     return;
   json::ref jref = jglb["ata_sct_capabilities"];
@@ -3430,9 +3430,9 @@ static void print_standby_timer(const char * msg, int timer, const ata_identify_
     s1 = "reserved";
 
   const char * s2 = "", * s3 = "";
-  if (!(drive.words047_079[49-47] & 0x2000))
+  if (!(ata_get_id_word<49>(drive) & 0x2000))
     s2 = " or vendor-specific";
-  if (timer > 0 && (drive.words047_079[50-47] & 0xc001) == 0x4001)
+  if (timer > 0 && (ata_get_id_word<50>(drive) & 0xc001) == 0x4001)
     s3 = ", a vendor-specific minimum applies";
 
   if (s1)
@@ -3603,10 +3603,9 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
   // Start by getting Drive ID information.  We need this, to know if SMART is supported.
   int returnval = 0;
   ata_identify_device drive; memset(&drive, 0, sizeof(drive));
-  unsigned char raw_drive[sizeof(drive)]; memset(&raw_drive, 0, sizeof(raw_drive));
 
   device->clear_err();
-  int retid = ata_read_identity(device, &drive, options.fix_swapped_id, raw_drive);
+  int retid = ata_read_identity(device, drive, options.fix_swapped_id);
   if (retid < 0) {
     pout("Read Device Identity failed: %s\n\n",
          (device->get_errno() ? device->get_errmsg() : "Unknown error"));
@@ -3645,8 +3644,11 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
   // Print ATA IDENTIFY info if requested
   if (options.identify_word_level >= 0) {
     pout("=== ATA IDENTIFY DATA ===\n");
-    // Pass raw data without endianness adjustments
-    ata_print_identify_data(raw_drive, (options.identify_word_level > 0), options.identify_bit_level);
+    // Pass raw data without byte swapping
+    ata_identify_device raw_id = drive;
+    ata_byteswap_id_strings_inplace(raw_id);
+    ata_if_be_byteswap_inplace(raw_id);
+    ata_print_identify_data(&raw_id, (options.identify_word_level > 0), options.identify_bit_level);
   }
 
   // Print most drive identity information if requested
@@ -3717,25 +3719,25 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
   if (options.get_aam) {
     if ((drive.command_set_2 & 0xc200) != 0x4200) // word083
       pout("AAM feature is:   Unavailable\n");
-    else if (!(drive.word086 & 0x0200)) {
+    else if (!(drive.cfs_enabled_2 & 0x0200)) {
       jout("AAM feature is:   Disabled\n");
       jglb["ata_aam"]["enabled"] = false;
     }
     else
-      print_aam_level("AAM level is:     ", drive.words088_255[94-88] & 0xff,
-        drive.words088_255[94-88] >> 8);
+      print_aam_level("AAM level is:     ", ata_get_id_word<94>(drive) & 0xff,
+        ata_get_id_word<94>(drive) >> 8);
   }
 
   // Print APM status
   if (options.get_apm) {
     if ((drive.command_set_2 & 0xc008) != 0x4008) // word083
       pout("APM feature is:   Unavailable\n");
-    else if (!(drive.word086 & 0x0008)) {
+    else if (!(drive.cfs_enabled_2 & 0x0008)) {
       jout("APM feature is:   Disabled\n");
       jglb["ata_apm"]["enabled"] = false;
     }
     else
-      print_apm_level("APM level is:     ", drive.words088_255[91-88] & 0xff);
+      print_apm_level("APM level is:     ", ata_get_id_word<91>(drive) & 0xff);
   }
 
   // Print read look-ahead status
@@ -3744,7 +3746,7 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
         || !(drive.command_set_1 & 0x0040)         ) // word082
       pout("Rd look-ahead is: Unavailable\n");
     else {
-      bool enabled = !!(drive.cfs_enable_1 & 0x0040); // word085
+      bool enabled = !!(drive.cfs_enabled_1 & 0x0040); // word085
       jout("Rd look-ahead is: %sabled\n", (enabled ? "En" : "Dis"));
       jglb["read_lookahead"]["enabled"] = enabled;
     }
@@ -3756,17 +3758,17 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
         || !(drive.command_set_1 & 0x0020)         ) // word082
       pout("Write cache is:   Unavailable\n");
     else {
-      bool enabled = !!(drive.cfs_enable_1 & 0x0020); // word085
+      bool enabled = !!(drive.cfs_enabled_1 & 0x0020); // word085
       jout("Write cache is:   %sabled\n", (enabled ? "En" : "Dis"));
       jglb["write_cache"]["enabled"] = enabled;
     }
   }
 
   // Print DSN status
-  unsigned short word120 = drive.words088_255[120-88];
-  unsigned short word119 = drive.words088_255[119-88];
+  uint16_t word120 = ata_get_id_word<120>(drive);
+  uint16_t word119 = ata_get_id_word<119>(drive);
   if (options.get_dsn) {
-    if (!(drive.word086 & 0x8000) // word086
+    if (!(drive.cfs_enabled_2 & 0x8000) // word086
        || ((word119 & 0xc200) != 0x4200) // word119
        || ((word120 & 0xc000) != 0x4000)) // word120
       pout("DSN feature is:   Unavailable\n");
@@ -3778,12 +3780,12 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
   }
 
   // Check for ATA Security LOCK
-  unsigned short word128 = drive.words088_255[128-88];
+  uint16_t word128 = ata_get_id_word<128>(drive);
   bool locked = ((word128 & 0x0007) == 0x0007); // LOCKED|ENABLED|SUPPORTED
 
   // Print ATA Security status
   if (options.get_security)
-    print_ata_security_status("ATA Security is:  ", word128, drive.words088_255[92-88]);
+    print_ata_security_status("ATA Security is:  ", word128, ata_get_id_word<92>(drive));
 
   // Print write cache reordering status
   if (options.sct_wcache_reorder_get) {
@@ -4595,7 +4597,7 @@ int ataPrintMain (ata_device * device, const ata_print_options & options)
   if (options.sataphy) {
     unsigned nsectors = GetNumLogSectors(gplogdir, 0x11, true);
     // Packet interface devices do not provide a log directory, check support bit
-    if (!nsectors && (drive.words047_079[76-47] & 0x0401) == 0x0400)
+    if (!nsectors && (ata_get_id_word<76>(drive) & 0x0401) == 0x0400)
       nsectors = 1;
     if (!nsectors)
       pout("SATA Phy Event Counters (GP Log 0x11) not supported\n\n");
