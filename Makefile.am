@@ -35,7 +35,6 @@ EXTRA_DIST = \
         doc/old/ChangeLog-5.0-6.0.txt \
         doc/old/ChangeLog-7.0-7.5.txt \
         drivedb/drivedb.h \
-        m4/pkg.m4 \
         $(doc_DATA) \
         $(docold_DATA) \
         $(examplescripts_DATA) \
@@ -63,7 +62,6 @@ MAINTAINERCLEANFILES = \
         $(srcdir)/m4/libtool.m4~ \
         $(srcdir)/m4/lt*.m4 \
         $(srcdir)/m4/lt*.m4~ \
-        $(srcdir)/m4/pkg.m4 \
         $(srcdir)/missing
 
 SUBDIRS = include lib src
@@ -71,11 +69,9 @@ SUBDIRS = include lib src
 #
 # Additional targets in '*/Makefile.am'
 #
-SRC_TARGETS = cppcheck htmlman pdfman shellcheck
+SRC_TARGETS = clean-examples cppcheck htmlman pdfman shellcheck uninstall-examples
 INC_SRC_TARGETS =
-LIB_SRC_TARGETS =
-LIB_TARGETS = uninstall-examples clean-examples
-INC_LIB_TARGETS = examples install-examples
+LIB_SRC_TARGETS = examples install-examples
 
 if OS_WIN32_MINGW
 SRC_TARGETS += cleandist-win32 clean-vc distclean-vc maintainer-clean-vc
@@ -99,12 +95,6 @@ $(SRC_TARGETS) $(INC_SRC_TARGETS) $(LIB_SRC_TARGETS):
 	  echo $(MAKE) -C lib; $(MAKE) -C lib ;; \
 	esac
 	$(MAKE) -C src $@
-
-$(LIB_TARGETS) $(INC_LIB_TARGETS):
-	@case ' $(INC_LIB_TARGETS) ' in *\ $@\ *) \
-	  echo $(MAKE) -C include; $(MAKE) -C include ;; \
-	esac
-	$(MAKE) -C lib $@
 
 # Add version information to distribution directory
 dist-hook:

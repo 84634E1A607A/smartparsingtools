@@ -33,14 +33,6 @@ AC_PROG_CXX
 AM_PROG_AS
 AC_PROG_INSTALL
 
-m4_pattern_forbid([^PKG_PROG_])
-if test "$cross_compiling" = "no"; then
-  # PKG_PROG_PKG_CONFIG from 'pkgconf' >= 2.3.0 aborts if 'pkg-config' is
-  # missing and the new 2nd parameter is not set
-  m4_ifdef([PKG_PROG_PKG_CONFIG], [PKG_PROG_PKG_CONFIG([], [PKG_CONFIG=])],
-    [AC_MSG_WARN([m4/pkg.m4 missing, systemd detection disabled])])
-fi
-
 AC_ARG_VAR(SOURCE_DATE_EPOCH, [Reproducible build timestamp])
 AC_ARG_VAR(OBJCOPY, [Object file copy command which supports '-D'])
 AC_ARG_VAR(WINDMC, [Windows message compiler command])
@@ -238,26 +230,28 @@ AC_SUBST([develbindir])
 AM_CONDITIONAL(INSTALL_DEVEL_BIN, [test -n "$develbindir"])
 
 objcopy_deterministic=false
-case "$with_devel:$enable_static:$SOURCE_DATE_EPOCH" in
-  yes:yes:?*)
-    # Use 'objcopy -D' to remove the timestamps from the static library
-    # because libtool offers no way to pass '-D' to 'ranlib'.
-    AC_CHECK_TOOL(OBJCOPY, [objcopy], [false])
-    AC_MSG_CHECKING([whether $OBJCOPY accepts -D])
-    objcopy_deterministic="$OBJCOPY -D"
-    res=yes
-    if ! (rm -f conftest.a && ${AR:-false} cr conftest.a \
-          && $objcopy_deterministic conftest.a) >/dev/null 2>&1; then
+case "$with_devel:$SOURCE_DATE_EPOCH" in
+  yes:?*)
+    # Use 'objcopy -D' to remove the timestamps from possible static and
+    # import libraries because libtool offers no way to pass '-D' to 'ranlib'.
+    AC_CHECK_TOOL(OBJCOPY, [objcopy], [])
+    if test -n "$OBJCOPY"; then
+      AC_MSG_CHECKING([whether $OBJCOPY accepts -D])
+      cmd="$OBJCOPY -D"; res=no
+      if (rm -f conftest.a && ${AR:-false} cr conftest.a && $cmd conftest.a) >/dev/null 2>&1; then
+        objcopy_deterministic=$cmd; res=yes
+      fi
+      rm -f conftest.a
+      AC_MSG_RESULT([$res])
+    fi
+    if test "$objcopy_deterministic" = "false"; then
       # Accept missing reproducibility if unsupported and warn below
-      objcopy_deterministic=": unsupported objcopy -D"
+      objcopy_deterministic=": unsupported ${OBJCOPY:-objcopy} -D"
       res=no
     fi
-    rm -f conftest.a
-    AC_MSG_RESULT([$res])
     ;;
 esac
 AC_SUBST([objcopy_deterministic])
-AM_CONDITIONAL(REPRODUCIBLE_BUILD_STATIC_LIB, [test "$objcopy_deterministic" != "false"])
 
 initddir=
 AC_ARG_WITH(initscriptdir,
@@ -423,8 +417,9 @@ AC_ARG_WITH(os-deps,
     done
   ],[])
 
+# TODO: Remove after smartmontools 8.1 (TBD)
 AC_ARG_WITH(selinux,
-  [AS_HELP_STRING([--with-selinux@<:@=yes|no@:>@], [Enables SELinux support [no]])],
+  [AS_HELP_STRING([--with-selinux@<:@=yes|no@:>@], [(deprecated)])],
   [ if test "$withval" = "yes"; then
       AC_CHECK_HEADERS([selinux/selinux.h], [], [AC_MSG_ERROR([Missing SELinux header files])])
       AC_CHECK_LIB(selinux, matchpathcon, [], [AC_MSG_ERROR([Missing or incorrect SELinux library files])])
@@ -466,32 +461,63 @@ case "$with_libsystemd:$host_os" in
 esac
 AC_SUBST(SYSTEMD_LDADD)
 
+running_systemd=no
+case "$host_os:$cross_compiling:$with_libsystemd:$use_libsystemd" in
+  linux*:no:auto:no)
+    AC_MSG_CHECKING([for the command running as PID 1])
+    # 'ps 1' without '-o comm' may print '/sbin/init' which may be a symlink to systemd
+    cmd=$(ps --no-headers -o comm 1 2>/dev/null | sed -n '1s/^\([[0-9A-Za-z]]*\)$/\1/p')
+    AC_MSG_RESULT([${cmd:-unknown}])
+    test "$cmd" != "systemd" || running_systemd=yes
+esac
+
+AC_ARG_WITH(smartd-service-file,
+  [AS_HELP_STRING([--with-smartd-service-file@<:@=DIR/FILE.service|auto|yes|no@:>@],
+    [Path of smartd systemd service file [auto] (yes=[/usr]/lib/systemd/system/smartd.service)])])
+smartd_service="smartd.service"
+
+# TODO: Remove after smartmontools 8.1
 AC_ARG_WITH(systemdsystemunitdir,
-  [AS_HELP_STRING([--with-systemdsystemunitdir@<:@=DIR|auto|yes|no@:>@], [Location of systemd service files [auto]])],
-  [], [with_systemdsystemunitdir=auto])
+  [AS_HELP_STRING([--with-systemdsystemunitdir@<:@=DIR|auto|yes|no@:>@], [(deprecated)])],
+  [ test -z "$with_smartd_service_file" ||
+      AC_MSG_ERROR(['--with-systemdsystemunitdir' cannot be used with '--with-smartd-service-file'])
+    case $withval in
+      auto|yes|no) with_smartd_service_file=$withval ;;
+      *) with_smartd_service_file="$withval/$smartd_service" ;;
+    esac
+  ],
+  [test -n "$with_smartd_service_file" || with_smartd_service_file=auto])
 
 systemdsystemunitdir=
-case "$with_systemdsystemunitdir:$use_libsystemd" in
-  auto:yes|yes:yes)
-    if test -n "$PKG_CONFIG"; then
-      AC_MSG_CHECKING([for systemdsystemunitdir])
-      systemdsystemunitdir=`$PKG_CONFIG --variable=systemdsystemunitdir systemd 2>/dev/null`
-      AC_MSG_RESULT([${systemdsystemunitdir:-no}])
-    fi
-    case "$with_systemdsystemunitdir:$sysconfdir:$systemdsystemunitdir" in
+case "$with_smartd_service_file:$cross_compiling:$running_systemd:$use_libsystemd" in
+  auto:no:*yes*|yes:*)
+    AC_MSG_CHECKING([for systemdsystemunitdir])
+    # Start with '/usr/...' because '/lib' may be only a symlink to '/usr/lib'
+    for dir in /usr/lib/systemd/system /lib/systemd/system; do
+      if test -d $dir; then
+        systemdsystemunitdir=$dir
+        break
+      fi
+    done
+    AC_MSG_RESULT([${systemdsystemunitdir:-no}])
+    case "$with_smartd_service_file:$sysconfdir:$systemdsystemunitdir" in
       yes:*:) AC_MSG_ERROR([Location of systemd service files not found]) ;;
       yes:*:*|auto:*:|auto:/etc:*) ;;
-      *) systemdsystemunitdir='${prefix}'$systemdsystemunitdir ;;
+      *) systemdsystemunitdir='${prefix}'"${systemdsystemunitdir#/usr}" ;;
     esac ;;
   auto:*|no:*) ;;
-  *:yes) systemdsystemunitdir="$with_systemdsystemunitdir" ;;
-  *) AC_MSG_ERROR(['--with-systemdsystemunitdir=$with_systemdsystemunitdir' now requires '--with-libsystemd']) ;;
+  /?*/?*.service:*:*:*)
+    systemdsystemunitdir=${with_smartd_service_file%/*}
+    smartd_service=${with_smartd_service_file##*/} ;;
+  *) AC_MSG_ERROR([Invalid path for systemd service file: '$with_smartd_service_file']) ;;
 esac
 AC_SUBST(systemdsystemunitdir)
+AC_SUBST(smartd_service)
 AM_CONDITIONAL(INSTALL_SYSTEMDUNIT, [test -n "$systemdsystemunitdir"])
 
 AC_ARG_WITH(systemdenvfile,
-  [AS_HELP_STRING([--with-systemdenvfile@<:@=FILE|auto|yes|no@:>@], [Path of systemd EnvironmentFile [auto]])],
+  [AS_HELP_STRING([--with-systemdenvfile@<:@=DIR/FILE|auto|yes|no@:>@],
+    [Path of systemd EnvironmentFile [auto] (yes=SYSCONFDIR/[default|sysconfig]/smartmontools)])],
   [], [with_systemdenvfile=auto])
 
 systemdenvfile=
@@ -695,6 +721,7 @@ os_solaris=no
 os_win32=no
 os_win32_mingw=no
 os_win64=no
+os_os2=no
 os_man_filter=
 os_unmaintained=
 case "${host}" in
@@ -771,7 +798,7 @@ case "${host}" in
   *-*-os2-*)
     os_deps='os_os2.lo dev_legacy.lo' # TODO: migrate to new interface
     os_posix=no
-    os_unmaintained='OS/2'
+    os_os2=yes
     ;;
   *)
     os_deps='os_generic.lo'
@@ -808,6 +835,7 @@ AM_CONDITIONAL(OS_SOLARIS, [test "$os_solaris" = "yes"])
 AM_CONDITIONAL(OS_WIN32, [test "$os_win32" = "yes"])
 AM_CONDITIONAL(OS_WIN32_MINGW, [test "$os_win32_mingw" = "yes"])
 AM_CONDITIONAL(OS_WIN64, [test "$os_win64" = "yes"])
+AM_CONDITIONAL(OS_OS2, [test "$os_os2" = "yes"])
 
 if test "$GXX" = "yes"; then
   orig_CXXFLAGS=$CXXFLAGS
@@ -972,8 +1000,8 @@ AC_CONFIG_FILES([
   Makefile
   include/Makefile
   lib/Makefile
-  lib/examples/Makefile
   src/Makefile
+  src/examples/Makefile
 ])
 AC_OUTPUT
 AC_PROG_MAKE_SET
@@ -1080,7 +1108,7 @@ info=`
         echo "smartd initd script:    [[disabled]]"
       fi
       if test -n "$systemdsystemunitdir"; then
-        echo "smartd service file:    \`eval eval eval echo $systemdsystemunitdir\`/smartd.service"
+        echo "smartd service file:    \`eval eval eval echo $systemdsystemunitdir/$smartd_service\`"
         if test -n "$systemdenvfile"; then
           echo "smartd environ file:    \`eval eval eval echo $systemdenvfile\`"
         else
@@ -1123,15 +1151,12 @@ The option '--with-nvme-devicescan' is no longer required.
 NVMe device scanning is now always enabled if supported.
 ])
 
-case "$host_os:$with_libsystemd:$use_libsystemd:$PKG_CONFIG" in
-  linux*:auto:no:?*)
-    if $PKG_CONFIG systemd >/dev/null 2>&1; then
-      AC_MSG_WARN([
+case "$running_systemd:$with_libsystemd:$use_libsystemd" in
+  yes:auto:no) AC_MSG_WARN([
 systemd(1) is used on this system but smartd systemd notify support will
 not be available because a required library is missing.
 Use option '--without-libsystemd' to suppress this warning.
-])
-    fi ;;
+]) ;;
 esac
 
 case "$host_os:$WINDMC" in
@@ -1152,8 +1177,8 @@ $PACKAGE_BUGREPORT - Thanks!
 
 case $objcopy_deterministic in
   :*) AC_MSG_WARN([
-The installed static library will not be reproducible because 'objcopy -D'
-is not available.
+Installed static and import libraries will not be reproducible because
+'${OBJCOPY:-objcopy} -D' is not available.
 ]) ;;
 esac
 
@@ -1178,6 +1203,19 @@ esac
 # TODO: Remove after smartmontools 8.1
 test -z "$with_exampledir" || AC_MSG_WARN([
 Option '--with-exampledir' is deprecated, use '--with-smartd-scripts' instead.
+])
+
+# TODO: Remove after smartmontools 8.1
+test -z "$with_systemdsystemunitdir" || AC_MSG_WARN([
+Option '--with-systemdsystemunitdir' is deprecated, use '--with-smartd-service-file' instead.
+])
+
+# TODO: Remove after smartmontools 8.1 (TBD)
+test "$with_selinux" != "yes" || AC_MSG_WARN([
+Option '--with-selinux' is deprecated and may be removed in a future version
+of smartmontools.  It only affects the creation of missing /dev nodes for
+very old 3ware controllers.  If you still need this option, please inform
+$PACKAGE_BUGREPORT - Thanks!
 ])
 
 test -z "$os_unmaintained" || AC_MSG_WARN([
