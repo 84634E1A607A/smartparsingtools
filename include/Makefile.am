@@ -40,8 +40,7 @@ smartmon/version.h: smartmon/version.sh
 	$(AM_V_GEN)$(top_srcdir)/src/getversion.sh -i < smartmon/version.sh > $@.tmp
 	$(AM_V_at)mv -f $@.tmp $@
 
-smartmon/version.sh: ../src/getversion.sh ../config.h ../Makefile \
-                     Makefile ../lib/Makefile ../src/Makefile
+smartmon/version.sh: ../src/getversion.sh ../config.h Makefile
 	$(AM_V_at)$(MKDIR_P) smartmon
 	$(AM_V_GEN)$(top_srcdir)/src/getversion.sh -s > $@.tmp
 	$(AM_V_at)mv -f $@.tmp $@
@@ -53,6 +52,7 @@ smartmon_headers = \
         smartmon/byteorder.h \
         smartmon/dev_interface.h \
         smartmon/farmcmds.h \
+        smartmon/hexdump.h \
         smartmon/json.h \
         smartmon/knowndrives.h \
         smartmon/nvme.h \
