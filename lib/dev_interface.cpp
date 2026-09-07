@@ -3,7 +3,7 @@
  *
  * Home page of code is: https://www.smartmontools.org
  *
- * Copyright (C) 2008-25 Christian Franke
+ * Copyright (C) 2008-26 Christian Franke
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -138,10 +138,23 @@ ata_out_regs_48bit::ata_out_regs_48bit()
 }
 
 ata_cmd_in::ata_cmd_in()
-: direction(no_data),
-  buffer(0),
-  size(0)
 {
+}
+
+ata_cmd_in::ata_cmd_in(uint8_t command)
+: ata_cmd_in()
+{
+  in_regs.command = command;
+  if (command == ATA_SMART_CMD) {
+    in_regs.lba_mid = ATA_SMART_CMD_LBA_MID;
+    in_regs.lba_high = ATA_SMART_CMD_LBA_HIGH;
+  }
+}
+
+ata_cmd_in::ata_cmd_in(uint8_t command, uint8_t features)
+: ata_cmd_in(command)
+{
+  in_regs.features = features;
 }
 
 ata_cmd_out::ata_cmd_out()
@@ -304,6 +317,15 @@ void tunnelled_device_base::release(const smart_device * dev)
     m_tunnel_base_dev = 0;
 }
 
+void tunnelled_device_base::attach_base(smart_device * dev)
+{
+  if (m_tunnel_base_dev) {
+    if (m_tunnel_base_dev != dev)
+      delete dev;
+    throw std::logic_error("tunnelled_device<>::attach(): previous device object not released");
+  }
+  m_tunnel_base_dev = dev;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // smart_interface
@@ -321,8 +343,8 @@ std::string smart_interface::get_valid_dev_types_str()
   // default
   std::string s =
     "ata, scsi[+TYPE], nvme[,NSID], sat[,auto][,N][+TYPE], usbasm1352r,N, usbcypress[,X], "
-    "usbjmicron[,p][,x][,N], usbprolific, usbsunplus[/sat], sntasmedia[/sat], "
-    "sntjmicron[,NSID][/sat], sntrealtek[/sat], jmb39x[-q[2]],N[,sLBA][,force][+TYPE], "
+    "usbjmicron[,p][,x][,N], usbprolific, usbsunplus, sntasmedia, sntjmicron[,NSID], "
+    "sntrealtek, snt*/sat, sat/snt*, jmb39x[-q[2]],N[,sLBA][,force][+TYPE], "
     "jms56x,N[,sLBA][,force][+TYPE]";
   // append custom
   std::string s2 = get_valid_custom_dev_types_str();
@@ -473,7 +495,7 @@ smart_device * smart_interface::get_smart_device(const char * name, const char *
     return get_sat_device(sattype.c_str(), basedev.release()->to_scsi());
   }
 
-  else if (str_starts_with(type, "snt")) {
+  else if (str_starts_with(type, "snt") || str_starts_with(type, "sat/snt")) {
     smart_device_auto_ptr basedev( get_smart_device(name, "scsi") );
     if (!basedev)
       return set_err_np(EINVAL, "Type '%s': %s", type, get_errmsg());
@@ -563,9 +585,8 @@ std::string smart_interface::get_valid_custom_dev_types_str()
 
 smart_device * smart_interface::get_scsi_passthrough_device(const char * type, scsi_device * scsidev)
 {
-  if (!strncmp(type, "snt", 3)) {
+  if (str_starts_with(type, "snt") || str_starts_with(type, "sat/snt"))
     return get_snt_device(type, scsidev);
-  }
 
   return get_sat_device(type, scsidev);
 }
