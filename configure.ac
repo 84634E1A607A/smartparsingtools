@@ -114,7 +114,7 @@ AC_CHECK_HEADERS([locale.h])
 AC_CHECK_HEADERS([byteswap.h], [], [], [])
 
 case "$host" in
-  *-*-freebsd*|*-*-dragonfly*|*-*-kfreebsd*-gnu*|*-*-midnightbsd*)
+  *-*-freebsd*)
     # Check for FreeBSD twe and twa include files
     AC_CHECK_HEADERS([sys/tweio.h sys/twereg.h sys/tw_osl_ioctl.h])
     # Check for the FreeBSD CCISS system header and use internal one if not found
@@ -737,11 +737,14 @@ case "${host}" in
     os_nisdomainname="'nisdomainname' 'hostname -y' 'domainname'"
     os_man_filter=Linux
     ;;
-  *-*-freebsd*|*-*-dragonfly*|*-*-kfreebsd*-gnu*|*-*-midnightbsd*)
+  *-*-freebsd*)
     os_deps='os_freebsd.lo cciss.lo dev_areca.lo'
     os_libs='-lcam -lsbuf'
     os_dltools='fetch curl wget lynx'
-    AC_CHECK_LIB(usb, libusb20_dev_get_device_desc)
+    # The libusb 1.0 API references libpthread, which must be linked explicitly
+    # for static builds (--enable-static-link), so probe it with -lpthread too
+    AC_CHECK_LIB(usb, libusb_get_driver_np, [LIBS="-lusb $LIBS"], [], [-lpthread])
+    LIBS="$LIBS -lpthread"
     os_man_filter=FreeBSD
     ;;
   *-*-solaris*)

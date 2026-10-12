@@ -19,11 +19,7 @@
 #include <camlib.h>
 #include <cam/scsi/scsi_message.h>
 #include <cam/scsi/scsi_pass.h>
-#if defined(__DragonFly__)
-#include <sys/nata.h>
-#else
 #include <sys/ata.h>
-#endif
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/uio.h>
@@ -46,25 +42,11 @@
 #include "dev_ata_cmd_set.h"
 #include "dev_areca.h"
 
-#define USBDEV "/dev/usb"
-#if defined(__FreeBSD_version)
-
-// This way we define one variable for the GNU/kFreeBSD and FreeBSD 
-#define FREEBSDVER __FreeBSD_version
-#else
-#define FREEBSDVER __FreeBSD_kernel_version
+#if __FreeBSD_version < 1400000
+#error "FreeBSD 14.0 or later is required"
 #endif
 
-#if (FREEBSDVER >= 800000)
-#include <libusb20_desc.h>
-#include <libusb20.h>
-#elif defined(__DragonFly__)
-#include <bus/usb/usb.h>
-#include <bus/usb/usbhid.h>
-#else
-#include <dev/usb/usb.h>
-#include <dev/usb/usbhid.h>
-#endif
+#include <libusb.h>
 
 // based on "/sys/dev/nvme/nvme.h" from FreeBSD kernel sources
 #include "freebsd_nvme_ioctl.h" // NVME_PASSTHROUGH_CMD, nvme_completion_is_error
@@ -156,15 +138,6 @@ protected:
 private:
   int m_fd; ///< filedesc, -1 if not open.
 };
-
-#ifdef __GLIBC__
-static inline void * reallocf(void *ptr, size_t size) {
-   void *rv = realloc(ptr, size);
-   if((rv == NULL) && (size != 0))
-     free(ptr);
-   return rv;
-   }
-#endif
 
 freebsd_smart_device::~freebsd_smart_device()
 {
@@ -321,7 +294,6 @@ bool freebsd_ata_device::ata_pass_through(const ata_cmd_in & in, ata_cmd_out & o
   return true;
 }
 
-#if FREEBSDVER > 800100
 class freebsd_atacam_device : public freebsd_ata_device
 {
 public:
@@ -360,17 +332,6 @@ int freebsd_atacam_device::do_cmd( struct ata_ioc_request* request, bool is_48bi
 {
   union ccb ccb;
   int camflags;
-
-  // 48bit commands are broken in ATACAM before r242422/HEAD
-  // and may cause system hang
-  // First version with working support should be FreeBSD 9.2.0/RELEASE
-
-#if (FREEBSDVER < 902001)
-  if(!strcmp("ata",m_camdev->sim_name) && is_48bit_cmd) {
-    set_err(ENOSYS, "48-bit ATA commands not implemented for legacy controllers");
-    return -1;
-  }
-#endif
 
   memset(&ccb, 0, sizeof(ccb));
 
@@ -433,8 +394,6 @@ int freebsd_atacam_device::do_cmd( struct ata_ioc_request* request, bool is_48bi
 
   return 0;
 }
-
-#endif
 
 /////////////////////////////////////////////////////////////////////////////
 /// NVMe support
@@ -518,11 +477,7 @@ bool freebsd_nvme_device::nvme_pass_through(const nvme_cmd_in & in, nvme_cmd_out
   struct nvme_completion *cp_p;
   memset(&pt, 0, sizeof(pt));
 
-#if __FreeBSD_version >= 1200058 && __FreeBSD_version < 1200081
-  pt.cmd.opc_fuse = NVME_CMD_SET_OPC(in.opcode);
-#else
   pt.cmd.opc = in.opcode;
-#endif
   pt.cmd.nsid = htole32(in.nsid);
   pt.buf = in.buffer;
   pt.len = in.size;
@@ -538,9 +493,7 @@ bool freebsd_nvme_device::nvme_pass_through(const nvme_cmd_in & in, nvme_cmd_out
 
   if (status < 0)
     return set_err(errno, "NVME_PASSTHROUGH_CMD: %s", strerror(errno));
-#if __FreeBSD_version >= 1200058
   nvme_completion_swapbytes(&pt.cpl);
-#endif
   cp_p = &pt.cpl;
   out.result=cp_p->cdw0; // Command specific result (DW0)
 
@@ -1678,9 +1631,7 @@ protected:
 
   virtual ata_device * get_ata_device(const char * name, const char * type) override;
 
-#if FREEBSDVER > 800100
   virtual ata_device * get_atacam_device(const char * name, const char * type);
-#endif
 
   virtual scsi_device * get_scsi_device(const char * name, const char * type) override;
  
@@ -1722,12 +1673,10 @@ ata_device * freebsd_smart_interface::get_ata_device(const char * name, const ch
   return new freebsd_ata_device(this, name, type);
 }
 
-#if FREEBSDVER > 800100
 ata_device * freebsd_smart_interface::get_atacam_device(const char * name, const char * type)
 {
   return new freebsd_atacam_device(this, name, type);
 }
-#endif
 
 scsi_device * freebsd_smart_interface::get_scsi_device(const char * name, const char * type)
 {
@@ -2152,138 +2101,77 @@ freebsd_smart_interface::megaraid_pd_add_list(const char * devname, smart_device
   return (0);
 }
 
-#if (FREEBSDVER < 800000) // without this build fail on FreeBSD 8
-static char done[USB_MAX_DEVICES];
-
-static int usbdevinfo(int f, int a, int rec, int busno, unsigned short & vendor_id,
-  unsigned short & product_id, unsigned short & version)
-{ 
-
-  struct usb_device_info di;
-  int e, p, i;
-  char devname[256];
-
-  snprintf(devname, sizeof(devname),"umass%d",busno);
-
-  di.udi_addr = a;
-  e = ioctl(f, USB_DEVICEINFO, &di);
-  if (e) {
-    if (errno != ENXIO)
-      printf("addr %d: I/O error\n", a);
-    return 0;
-  }
-  done[a] = 1;
-
-  // list devices
-  for (i = 0; i < USB_MAX_DEVNAMES; i++) {
-    if (di.udi_devnames[i][0]) {
-      if(strcmp(di.udi_devnames[i],devname)==0) {
-        // device found!
-        vendor_id = di.udi_vendorNo;
-        product_id = di.udi_productNo;
-        version = di.udi_releaseNo;
-        return 1;
-        // FIXME
-      }
-    }
-  }
-  if (!rec)
-    return 0;
-  for (p = 0; p < di.udi_nports; p++) {
-    int s = di.udi_ports[p];
-    if (s >= USB_MAX_DEVICES) {
-      continue;
-    }
-    if (s == 0)
-      printf("addr 0 should never happen!\n");
-    else {
-      if(usbdevinfo(f, s, 1, busno, vendor_id, product_id, version)) return 1;
-    }
-  }
-  return 0;
-}
-#endif
-
-
 static int usbdevlist(int busno,unsigned short & vendor_id,
   unsigned short & product_id, unsigned short & version)
 {
-#if (FREEBSDVER >= 800000) // libusb2 interface
-  struct libusb20_device *pdev = NULL;
-  struct libusb20_backend *pbe;
-  uint32_t matches = 0;
+  libusb_context *ctx = nullptr;
+  libusb_device **list = nullptr;
   char buf[128]; // do not change!
   char devname[128];
-  uint8_t n;
-  struct LIBUSB20_DEVICE_DESC_DECODED *pdesc;
+  int found = 0;
 
-  pbe = libusb20_be_alloc_default();
+  if (libusb_init(&ctx)) {
+    warnx("libusb_init: could not initialize libusb");
+    return 0;
+  }
 
-  while ((pdev = libusb20_be_device_foreach(pbe, pdev))) {
-    matches++;
+  ssize_t cnt = libusb_get_device_list(ctx, &list);
+  if (cnt < 0) {
+    warnx("libusb_get_device_list: could not list devices");
+    libusb_exit(ctx);
+    return 0;
+  }
 
-    if (libusb20_dev_open(pdev, 0)) {
-      warnx("libusb20_dev_open: could not open device");
-      return 0;
+  snprintf(devname, sizeof(devname), "umass%d", busno);
+
+  for (ssize_t i = 0; i < cnt && !found; i++) {
+    libusb_device * dev = list[i];
+    struct libusb_device_descriptor desc;
+    struct libusb_config_descriptor * config = nullptr;
+
+    if (libusb_get_device_descriptor(dev, &desc))
+      continue;
+
+    libusb_device_handle * handle = nullptr;
+    if (libusb_open(dev, &handle)) {
+      warnx("libusb_open: could not open device");
+      continue;
     }
 
-    pdesc=libusb20_dev_get_device_desc(pdev);
+    if (libusb_get_active_config_descriptor(dev, &config)) {
+      libusb_close(handle);
+      continue;
+    }
 
-    snprintf(devname, sizeof(devname),"umass%d:",busno);
-    for (n = 0; n != 255; n++) {
-      if (libusb20_dev_get_iface_desc(pdev, n, buf, sizeof(buf)))
-        break;
+    // Check the kernel driver of each interface declared by the active
+    // configuration.  On FreeBSD libusb_get_driver_np() takes the interface
+    // index (passed through to USB_GET_IFACE_DRIVER), not bInterfaceNumber.
+    for (uint8_t j = 0; j < config->bNumInterfaces && !found; j++) {
+      // returns the name of the kernel driver attached to this interface
+      if (libusb_get_driver_np(handle, j, buf, sizeof(buf)))
+        continue;
       if (buf[0] == 0)
         continue;
-      if(strncmp(buf,devname,strlen(devname))==0){
-        // found!
-        vendor_id = pdesc->idVendor;
-        product_id = pdesc->idProduct;
-        version = pdesc->bcdDevice;
-        libusb20_dev_close(pdev);
-        libusb20_be_free(pbe);
-        return 1;
+      if (!strcmp(buf, devname)) {
+        vendor_id = desc.idVendor;
+        product_id = desc.idProduct;
+        version = desc.bcdDevice;
+        found = 1;
       }
     }
 
-    libusb20_dev_close(pdev);
+    libusb_free_config_descriptor(config);
+    libusb_close(handle);
   }
 
-  if (matches == 0) {
+  if (cnt == 0) {
     printf("No device match or lack of permissions.\n");
   }
 
-  libusb20_be_free(pbe);
+  libusb_free_device_list(list, 1);
+  libusb_exit(ctx);
 
-  return false;
-#else // freebsd < 8.0 USB stack, ioctl interface
-
-  int  i, a, rc;
-  char buf[50];
-  int ncont;
-
-  for (ncont = 0, i = 0; i < 10; i++) {
-    snprintf(buf, sizeof(buf), "%s%d", USBDEV, i);
-    int f = open(buf, O_RDONLY);
-    if (f >= 0) {
-      memset(done, 0, sizeof done);
-      for (a = 1; a < USB_MAX_DEVICES; a++) {
-        if (!done[a]) {
-          rc = usbdevinfo(f, a, 1, busno,vendor_id, product_id, version);
-          if(rc) return 1;
-        }
-
-      }
-      close(f);
-    } else {
-      if (errno == ENOENT || errno == ENXIO)
-        continue;
-      warn("%s", buf);
-    }
-    ncont++;
-  }
-  return 0;
-#endif
+  return found;
 }
 
 smart_device * freebsd_smart_interface::autodetect_smart_device(const char * name)
@@ -2371,13 +2259,11 @@ smart_device * freebsd_smart_interface::autodetect_smart_device(const char * nam
           }
           return 0;
         }
-#if FREEBSDVER > 800100
         // check if we have ATA device connected to CAM (ada)
         if(ccb.cpi.protocol == PROTO_ATA){
           cam_close_device(cam_dev);
           return new freebsd_atacam_device(this, test_name, "");
         }
-#endif
         // close cam device, we don`t need it anymore
         cam_close_device(cam_dev);
         // handle as usual scsi
@@ -2481,11 +2367,9 @@ smart_device * freebsd_smart_interface::get_custom_smart_device(const char * nam
     }
     return get_sat_device("sat,auto", new freebsd_cciss_device(this, name, disknum));
   }
-#if FREEBSDVER > 800100
   // adaX devices ?
   if(!strcmp(type,"atacam"))
     return new freebsd_atacam_device(this, name, "");
-#endif
   // Areca?
   disknum = n1 = n2 = -1;
   int encnum = 1;
@@ -2510,11 +2394,7 @@ smart_device * freebsd_smart_interface::get_custom_smart_device(const char * nam
 
 std::string freebsd_smart_interface::get_valid_custom_dev_types_str()
 {
-  return "3ware,N, hpt,L/M/N, cciss,N, areca,N/E, megaraid,N"
-#if FREEBSDVER > 800100
-  ", atacam"
-#endif
-  ;
+  return "3ware,N, hpt,L/M/N, cciss,N, areca,N/E, megaraid,N, atacam";
 }
 
 } // namespace os_freebsd
